@@ -1,20 +1,25 @@
-import express from 'express';
-import cors from 'cors';
-import generationRoutes from './routes/generation.routes';
+import http from "http";
+import express from "express";
+import cors from "cors";
+import generationRoutes from "./routes/generation.routes";
+import { initSocket } from "./lib/socket";
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 4000;
+
+initSocket(server);
 
 app.use(cors());
 app.use(express.json());
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.use('/api/generations', generationRoutes);
+app.use("/api/generations", generationRoutes);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 

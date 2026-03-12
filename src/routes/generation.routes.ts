@@ -2,12 +2,14 @@ import { Router, Request, Response } from "express";
 import { GenerationType, GenerationJob } from "@prisma/client";
 import {
   createJob,
+  getJobById,
   updateJobStatus,
   saveJobResult,
 } from "../repositories/generation.repository";
 import { enhancePrompt } from "../services/promptEnhancer";
 import { generateImage } from "../services/imageService";
 import { generateText } from "../services/textService";
+import { emitJobUpdate } from "../lib/socket";
 
 const router = Router();
 
@@ -15,21 +17,25 @@ const VALID_TYPES = Object.values(GenerationType);
 
 async function processJob(job: GenerationJob): Promise<void> {
   try {
-    await updateJobStatus(job.id, "GENERATING");
+    const generating = await updateJobStatus(job.id, "GENERATING");
+    emitJobUpdate(generating);
 
     const prompt = job.enhancedPrompt || job.originalPrompt;
 
+    let updated: GenerationJob;
     if (job.type === GenerationType.IMAGE) {
       const resultUrl = await generateImage(prompt);
-      await saveJobResult(job.id, { resultUrl });
+      updated = await saveJobResult(job.id, { resultUrl });
     } else {
       const resultText = await generateText(prompt);
-      await saveJobResult(job.id, { resultText });
+      updated = await saveJobResult(job.id, { resultText });
     }
+    emitJobUpdate(updated);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
-    await updateJobStatus(job.id, "FAILED", message);
+    const failed = await updateJobStatus(job.id, "FAILED", message);
+    emitJobUpdate(failed);
   }
 }
 
