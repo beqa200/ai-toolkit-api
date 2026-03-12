@@ -1,7 +1,6 @@
 import { ExternalServiceError } from "../lib/errors";
+import { pollinationsRequest } from "../lib/pollinationsClient";
 import logger from "../lib/logger";
-
-const POLLINATIONS_BASE_URL = process.env.POLLINATIONS_BASE_URL;
 
 interface TextParameters {
   tone?: string;
@@ -26,30 +25,11 @@ export async function generateText(
 
   const fullPrompt = parts.join(" ");
   const encodedPrompt = encodeURIComponent(fullPrompt);
-  const url = `${POLLINATIONS_BASE_URL}/text/${encodedPrompt}`;
 
-  logger.info("Requesting text from Pollinations", { context: "TextService" });
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}`,
-      },
-    });
-  } catch (error) {
-    throw new ExternalServiceError(
-      "Pollinations",
-      `Network error: ${error instanceof Error ? error.message : "connection failed"}`
-    );
-  }
-
-  if (!response.ok) {
-    throw new ExternalServiceError(
-      "Pollinations",
-      `Text API returned ${response.status}: ${response.statusText}`
-    );
-  }
+  const response = await pollinationsRequest(
+    `/text/${encodedPrompt}`,
+    "TextService"
+  );
 
   const text = await response.text();
 

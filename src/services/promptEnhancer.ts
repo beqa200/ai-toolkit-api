@@ -1,7 +1,6 @@
 import { ExternalServiceError } from "../lib/errors";
+import { pollinationsRequest } from "../lib/pollinationsClient";
 import logger from "../lib/logger";
-
-const POLLINATIONS_BASE_URL = process.env.POLLINATIONS_BASE_URL;
 
 const SYSTEM_PROMPT = [
   "You are a prompt enhancement specialist.",
@@ -24,32 +23,10 @@ export async function enhancePrompt(prompt: string): Promise<string> {
     json: "false",
   });
 
-  const url = `${POLLINATIONS_BASE_URL}/text/${encodedMessage}?${queryParams}`;
-
-  logger.info("Enhancing prompt via Pollinations", {
-    context: "PromptEnhancer",
-  });
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}`,
-      },
-    });
-  } catch (error) {
-    throw new ExternalServiceError(
-      "Pollinations",
-      `Network error: ${error instanceof Error ? error.message : "connection failed"}`
-    );
-  }
-
-  if (!response.ok) {
-    throw new ExternalServiceError(
-      "Pollinations",
-      `Enhancement API returned ${response.status}: ${response.statusText}`
-    );
-  }
+  const response = await pollinationsRequest(
+    `/text/${encodedMessage}?${queryParams}`,
+    "PromptEnhancer"
+  );
 
   const enhanced = await response.text();
 
