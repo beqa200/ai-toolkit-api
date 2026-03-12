@@ -1,3 +1,6 @@
+import { ExternalServiceError } from "../lib/errors";
+import logger from "../lib/logger";
+
 const POLLINATIONS_BASE_URL = process.env.POLLINATIONS_BASE_URL;
 
 interface TextParameters {
@@ -5,9 +8,12 @@ interface TextParameters {
   maxLength?: number;
 }
 
-export async function generateText(prompt: string, parameters?: TextParameters): Promise<string> {
+export async function generateText(
+  prompt: string,
+  parameters?: TextParameters
+): Promise<string> {
   if (!prompt.trim()) {
-    throw new Error('Prompt cannot be empty');
+    throw new ExternalServiceError("TextService", "Prompt cannot be empty");
   }
 
   const parts = [prompt];
@@ -18,30 +24,45 @@ export async function generateText(prompt: string, parameters?: TextParameters):
     parts.push(`Keep the response under ${parameters.maxLength} characters.`);
   }
 
-  const fullPrompt = parts.join(' ');
+  const fullPrompt = parts.join(" ");
   const encodedPrompt = encodeURIComponent(fullPrompt);
   const url = `${POLLINATIONS_BASE_URL}/text/${encodedPrompt}`;
 
+  logger.info("Requesting text from Pollinations", { context: "TextService" });
+
+  let response: Response;
   try {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}` },
+    response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}`,
+      },
     });
-
-    if (!response.ok) {
-      throw new Error(`Pollinations API returned status ${response.status}`);
-    }
-
-    const text = await response.text();
-
-    if (!text.trim()) {
-      throw new Error('Pollinations API returned an empty response');
-    }
-
-    return text.trim();
   } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error(`Failed to reach Pollinations API: ${error.message}`);
-    }
-    throw error;
+    throw new ExternalServiceError(
+      "Pollinations",
+      `Network error: ${error instanceof Error ? error.message : "connection failed"}`
+    );
   }
+
+  if (!response.ok) {
+    throw new ExternalServiceError(
+      "Pollinations",
+      `Text API returned ${response.status}: ${response.statusText}`
+    );
+  }
+
+  const text = await response.text();
+
+  if (!text.trim()) {
+    throw new ExternalServiceError(
+      "Pollinations",
+      "Text API returned an empty response"
+    );
+  }
+
+  logger.info(`Text generated (${text.trim().length} chars)`, {
+    context: "TextService",
+  });
+
+  return text.trim();
 }
