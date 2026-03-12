@@ -3,6 +3,7 @@ import { GenerationType, GenerationJob } from "@prisma/client";
 import {
   createJob,
   getJobById,
+  getAllJobs,
   updateJobStatus,
   saveJobResult,
 } from "../repositories/generation.repository";
@@ -86,6 +87,36 @@ router.post("/", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Failed to create generation job:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/", async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
+
+    const jobs = await getAllJobs({ limit, offset });
+
+    res.json(jobs);
+  } catch (error) {
+    console.error("Failed to fetch jobs:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/:id", async (req: Request, res: Response) => {
+  try {
+    const job = await getJobById(req.params.id as string);
+
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+
+    res.json(job);
+  } catch (error) {
+    console.error("Failed to fetch job:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
