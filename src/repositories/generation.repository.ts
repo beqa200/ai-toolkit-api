@@ -1,5 +1,5 @@
-import prisma from "../lib/db";
-import { GenerationType, JobStatus } from "@prisma/client";
+import prisma from '../lib/db';
+import { GenerationType, JobStatus } from '@prisma/client';
 
 export function createJob(data: {
   originalPrompt: string;
@@ -20,14 +20,34 @@ export function createJob(data: {
 export function getJobById(id: string) {
   return prisma.generationJob.findUnique({
     where: { id },
+    select: {
+      id: true,
+      originalPrompt: true,
+      type: true,
+      status: true,
+      resultUrl: true,
+      resultText: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
 }
 
 export function getAllJobs(options?: { limit?: number; offset?: number }) {
   return prisma.generationJob.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: 'desc' },
     take: options?.limit,
     skip: options?.offset,
+    select: {
+      id: true,
+      originalPrompt: true,
+      type: true,
+      status: true,
+      resultUrl: true,
+      resultText: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
 }
 
@@ -37,16 +57,12 @@ export function getPendingJobs(limit: number = 5) {
       status: JobStatus.PENDING,
       cancelled: false,
     },
-    orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+    orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     take: limit,
   });
 }
 
-export function updateJobStatus(
-  id: string,
-  status: JobStatus,
-  errorMessage?: string
-) {
+export function updateJobStatus(id: string, status: JobStatus, errorMessage?: string) {
   return prisma.generationJob.update({
     where: { id },
     data: {
@@ -62,7 +78,7 @@ export function saveJobResult(
     enhancedPrompt?: string;
     resultUrl?: string;
     resultText?: string;
-  }
+  },
 ) {
   return prisma.generationJob.update({
     where: { id },

@@ -21,15 +21,22 @@ async function processJob(job: GenerationJob): Promise<void> {
     const generating = await updateJobStatus(job.id, 'GENERATING');
     emitJobUpdate(generating);
 
-    const prompt = job.enhancedPrompt || job.originalPrompt;
+    let enhancedPromptText: string | undefined;
+    try {
+      enhancedPromptText = await enhancePrompt(job.originalPrompt);
+    } catch {
+      // Enhancement is best-effort; fall back to original prompt
+    }
+
+    const prompt = enhancedPromptText || job.originalPrompt;
 
     let updated: GenerationJob;
     if (job.type === GenerationType.IMAGE) {
       const resultUrl = await generateImage(prompt);
-      updated = await saveJobResult(job.id, { resultUrl });
+      updated = await saveJobResult(job.id, { enhancedPrompt: enhancedPromptText, resultUrl });
     } else {
       const resultText = await generateText(prompt);
-      updated = await saveJobResult(job.id, { resultText });
+      updated = await saveJobResult(job.id, { enhancedPrompt: enhancedPromptText, resultText });
     }
     emitJobUpdate(updated);
   } catch (error) {
@@ -58,21 +65,13 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    let enhancedPromptText: string | undefined;
-    try {
-      enhancedPromptText = await enhancePrompt(prompt.trim());
-    } catch {
-      // Enhancement is best-effort; proceed with original prompt if it fails
-    }
-
     const job = await createJob({
       originalPrompt: prompt.trim(),
-      enhancedPrompt: enhancedPromptText,
       type,
       priority,
     });
 
-    // Fire-and-forget: generation runs in the background
+    // Fire-and-forget: enhancement + generation run in the background
     processJob(job).catch((err) =>
       console.error(`Background processing failed for job ${job.id}:`, err),
     );
@@ -80,7 +79,6 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json({
       jobId: job.id,
       status: job.status,
-      enhancedPrompt: job.enhancedPrompt,
     });
   } catch (error) {
     console.error('Failed to create generation job:', error);
