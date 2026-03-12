@@ -19,6 +19,7 @@ export async function generateImage(prompt: string, parameters?: ImageParameters
     queryParams.set('width', String(parameters.resolution));
     queryParams.set('height', String(parameters.resolution));
   }
+  queryParams.set('model', 'flux');
 
   const queryString = queryParams.toString();
   const url = `${POLLINATIONS_BASE_URL}/image/${encodedPrompt}${queryString ? `?${queryString}` : ''}`;
