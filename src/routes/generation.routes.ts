@@ -6,6 +6,8 @@ import {
   getAllJobs,
   updateJobStatus,
   saveJobResult,
+  cancelJob,
+  getJobForRetry,
 } from "../repositories/generation.repository";
 import { enhancePrompt } from "../services/promptEnhancer";
 import { generateImage } from "../services/imageService";
@@ -18,14 +20,24 @@ const router = Router();
 
 const VALID_TYPES = Object.values(GenerationType);
 
+const activeJobs = new Map<string, AbortController>();
+
 async function processJob(job: GenerationJob): Promise<void> {
   const log = (msg: string, level: "info" | "warn" | "error" = "info") =>
     logger[level](msg, { context: "JobProcessor", jobId: job.id });
+
+  const abortController = new AbortController();
+  activeJobs.set(job.id, abortController);
 
   try {
     log("Starting processing");
     const generating = await updateJobStatus(job.id, "GENERATING");
     emitJobUpdate(generating);
+
+    if (abortController.signal.aborted) {
+      log("Job was cancelled before processing started");
+      return;
+    }
 
     let enhancedPromptText: string | undefined;
     try {
@@ -38,12 +50,23 @@ async function processJob(job: GenerationJob): Promise<void> {
       );
     }
 
+    if (abortController.signal.aborted) {
+      log("Job was cancelled after prompt enhancement");
+      return;
+    }
+
     const prompt = enhancedPromptText || job.originalPrompt;
 
     let updated: GenerationJob;
     if (job.type === GenerationType.IMAGE) {
       log("Generating image");
       const resultUrl = await generateImage(prompt);
+      
+      if (abortController.signal.aborted) {
+        log("Job was cancelled after image generation");
+        return;
+      }
+      
       updated = await saveJobResult(job.id, {
         enhancedPrompt: enhancedPromptText,
         resultUrl,
@@ -51,6 +74,12 @@ async function processJob(job: GenerationJob): Promise<void> {
     } else {
       log("Generating text");
       const resultText = await generateText(prompt);
+      
+      if (abortController.signal.aborted) {
+        log("Job was cancelled after text generation");
+        return;
+      }
+      
       updated = await saveJobResult(job.id, {
         enhancedPrompt: enhancedPromptText,
         resultText,
@@ -60,6 +89,11 @@ async function processJob(job: GenerationJob): Promise<void> {
     log("Completed successfully");
     emitJobUpdate(updated);
   } catch (error) {
+    if (abortController.signal.aborted) {
+      log("Job processing was aborted");
+      return;
+    }
+
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
     log(`Failed: ${message}`, "error");
@@ -73,6 +107,8 @@ async function processJob(job: GenerationJob): Promise<void> {
         "error"
       );
     }
+  } finally {
+    activeJobs.delete(job.id);
   }
 }
 
@@ -148,6 +184,79 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
     }
 
     res.json(job);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/cancel", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const jobId = req.params.id as string;
+    const existingJob = await getJobById(jobId);
+
+    if (!existingJob) {
+      throw new NotFoundError("Job");
+    }
+
+    if (existingJob.status === "COMPLETED" || existingJob.status === "FAILED" || existingJob.status === "CANCELLED") {
+      throw new ValidationError(`Cannot cancel a job with status: ${existingJob.status}`);
+    }
+
+    const abortController = activeJobs.get(jobId);
+    if (abortController) {
+      abortController.abort();
+    }
+
+    const cancelledJob = await cancelJob(jobId);
+    
+    logger.info(`Job cancelled: ${jobId}`, { context: "API", jobId });
+    emitJobUpdate(cancelledJob);
+
+    res.json({
+      jobId: cancelledJob.id,
+      status: cancelledJob.status,
+      message: "Job cancelled successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/retry", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const jobId = req.params.id as string;
+    const existingJob = await getJobForRetry(jobId);
+
+    if (!existingJob) {
+      throw new NotFoundError("Job");
+    }
+
+    const newJob = await createJob({
+      originalPrompt: existingJob.originalPrompt,
+      type: existingJob.type,
+      priority: existingJob.priority,
+    });
+
+    logger.info(`Job retried: ${jobId} -> ${newJob.id}`, { 
+      context: "API", 
+      originalJobId: jobId,
+      newJobId: newJob.id 
+    });
+
+    processJob(newJob).catch((err) =>
+      logger.error(`Background processing failed for job ${newJob.id}`, {
+        context: "JobProcessor",
+        jobId: newJob.id,
+        stack: err instanceof Error ? err.stack : undefined,
+      })
+    );
+
+    res.status(201).json({
+      jobId: newJob.id,
+      status: newJob.status,
+      originalJobId: jobId,
+      message: "Job retry initiated",
+    });
   } catch (error) {
     next(error);
   }

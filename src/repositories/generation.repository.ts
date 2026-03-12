@@ -17,6 +17,27 @@ export function createJob(data: {
   });
 }
 
+export function cancelJob(id: string) {
+  return prisma.generationJob.update({
+    where: { id },
+    data: {
+      status: JobStatus.CANCELLED,
+      cancelled: true,
+    },
+  });
+}
+
+export function getJobForRetry(id: string) {
+  return prisma.generationJob.findUnique({
+    where: { id },
+    select: {
+      originalPrompt: true,
+      type: true,
+      priority: true,
+    },
+  });
+}
+
 export function getJobById(id: string) {
   return prisma.generationJob.findUnique({
     where: { id },
