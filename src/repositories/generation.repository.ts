@@ -3,12 +3,14 @@ import { GenerationType, JobStatus } from "@prisma/client";
 
 export function createJob(data: {
   originalPrompt: string;
+  enhancedPrompt?: string;
   type: GenerationType;
   priority?: number;
 }) {
   return prisma.generationJob.create({
     data: {
       originalPrompt: data.originalPrompt,
+      enhancedPrompt: data.enhancedPrompt,
       type: data.type,
       priority: data.priority ?? 0,
     },

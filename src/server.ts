@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
+import generationRoutes from './routes/generation.routes';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -12,8 +12,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// TODO: mount route modules here
-// app.use("/api/jobs", jobRoutes);
+app.use('/api/generations', generationRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

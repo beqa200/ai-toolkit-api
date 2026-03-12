@@ -24,7 +24,9 @@ export async function enhancePrompt(prompt: string): Promise<string> {
   const url = `${POLLINATIONS_BASE_URL}/text/${encodedMessage}?${queryParams}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}` },
+    });
 
     if (!response.ok) {
       throw new Error(`Pollinations API returned status ${response.status}`);
