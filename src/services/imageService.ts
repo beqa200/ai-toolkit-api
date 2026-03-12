@@ -1,44 +1,39 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
+
 const POLLINATIONS_BASE_URL = process.env.POLLINATIONS_BASE_URL;
+const IMAGES_DIR = path.join(__dirname, '../../public/images');
 
-interface ImageParameters {
-  style?: string;
-  resolution?: number;
-}
+fs.mkdirSync(IMAGES_DIR, { recursive: true });
 
-export async function generateImage(prompt: string, parameters?: ImageParameters): Promise<string> {
-  if (!prompt.trim()) {
-    throw new Error('Prompt cannot be empty');
+export async function generateImage(prompt: string): Promise<string> {
+  const encodedPrompt = encodeURIComponent(prompt);
+
+  const queryParams = new URLSearchParams({
+    width: '1024',
+    height: '1024',
+    model: 'flux',
+    seed: Math.floor(Math.random() * 1_000_000).toString(),
+  });
+
+  const url = `${POLLINATIONS_BASE_URL}/image/${encodedPrompt}?${queryParams.toString()}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pollinations image API returned ${response.status}: ${response.statusText}`);
   }
 
-  const fullPrompt = parameters?.style ? `${prompt}, ${parameters.style} style` : prompt;
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const filename = `${randomUUID()}.jpg`;
+  const filepath = path.join(IMAGES_DIR, filename);
+  fs.writeFileSync(filepath, buffer);
 
-  const encodedPrompt = encodeURIComponent(fullPrompt);
-
-  const queryParams = new URLSearchParams();
-  if (parameters?.resolution) {
-    queryParams.set('width', String(parameters.resolution));
-    queryParams.set('height', String(parameters.resolution));
-  }
-  queryParams.set('model', 'flux');
-
-  const queryString = queryParams.toString();
-  const url = `${POLLINATIONS_BASE_URL}/image/${encodedPrompt}${queryString ? `?${queryString}` : ''}`;
-
-  try {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${process.env.POLLINATIONS_API_KEY}` },
-      method: 'HEAD',
-    });
-
-    if (!response.ok) {
-      throw new Error(`Pollinations API returned status ${response.status}`);
-    }
-
-    return url;
-  } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error(`Failed to reach Pollinations API: ${error.message}`);
-    }
-    throw error;
-  }
+  return `/images/${filename}`;
 }

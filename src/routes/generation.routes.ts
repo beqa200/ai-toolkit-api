@@ -1,16 +1,16 @@
-import { Router, Request, Response } from "express";
-import { GenerationType, GenerationJob } from "@prisma/client";
+import { Router, Request, Response } from 'express';
+import { GenerationType, GenerationJob } from '@prisma/client';
 import {
   createJob,
   getJobById,
   getAllJobs,
   updateJobStatus,
   saveJobResult,
-} from "../repositories/generation.repository";
-import { enhancePrompt } from "../services/promptEnhancer";
-import { generateImage } from "../services/imageService";
-import { generateText } from "../services/textService";
-import { emitJobUpdate } from "../lib/socket";
+} from '../repositories/generation.repository';
+import { enhancePrompt } from '../services/promptEnhancer';
+import { generateImage } from '../services/imageService';
+import { generateText } from '../services/textService';
+import { emitJobUpdate } from '../lib/socket';
 
 const router = Router();
 
@@ -18,7 +18,7 @@ const VALID_TYPES = Object.values(GenerationType);
 
 async function processJob(job: GenerationJob): Promise<void> {
   try {
-    const generating = await updateJobStatus(job.id, "GENERATING");
+    const generating = await updateJobStatus(job.id, 'GENERATING');
     emitJobUpdate(generating);
 
     const prompt = job.enhancedPrompt || job.originalPrompt;
@@ -33,31 +33,28 @@ async function processJob(job: GenerationJob): Promise<void> {
     }
     emitJobUpdate(updated);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error occurred";
-    const failed = await updateJobStatus(job.id, "FAILED", message);
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    const failed = await updateJobStatus(job.id, 'FAILED', message);
     emitJobUpdate(failed);
   }
 }
 
-router.post("/", async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const { prompt, type, priority } = req.body;
 
-    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-      res.status(400).json({ error: "A non-empty prompt is required" });
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      res.status(400).json({ error: 'A non-empty prompt is required' });
       return;
     }
 
     if (!type || !VALID_TYPES.includes(type)) {
-      res
-        .status(400)
-        .json({ error: `Type must be one of: ${VALID_TYPES.join(", ")}` });
+      res.status(400).json({ error: `Type must be one of: ${VALID_TYPES.join(', ')}` });
       return;
     }
 
-    if (priority !== undefined && (typeof priority !== "number" || priority < 0)) {
-      res.status(400).json({ error: "Priority must be a non-negative number" });
+    if (priority !== undefined && (typeof priority !== 'number' || priority < 0)) {
+      res.status(400).json({ error: 'Priority must be a non-negative number' });
       return;
     }
 
@@ -77,7 +74,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     // Fire-and-forget: generation runs in the background
     processJob(job).catch((err) =>
-      console.error(`Background processing failed for job ${job.id}:`, err)
+      console.error(`Background processing failed for job ${job.id}:`, err),
     );
 
     res.status(201).json({
@@ -86,12 +83,12 @@ router.post("/", async (req: Request, res: Response) => {
       enhancedPrompt: job.enhancedPrompt,
     });
   } catch (error) {
-    console.error("Failed to create generation job:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Failed to create generation job:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get("/", async (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
@@ -100,24 +97,24 @@ router.get("/", async (req: Request, res: Response) => {
 
     res.json(jobs);
   } catch (error) {
-    console.error("Failed to fetch jobs:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Failed to fetch jobs:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get("/:id", async (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const job = await getJobById(req.params.id as string);
 
     if (!job) {
-      res.status(404).json({ error: "Job not found" });
+      res.status(404).json({ error: 'Job not found' });
       return;
     }
 
     res.json(job);
   } catch (error) {
-    console.error("Failed to fetch job:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Failed to fetch job:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
