@@ -1,11 +1,37 @@
 import { Router, Request, Response } from "express";
-import { GenerationType } from "@prisma/client";
-import { createJob } from "../repositories/generation.repository";
+import { GenerationType, GenerationJob } from "@prisma/client";
+import {
+  createJob,
+  updateJobStatus,
+  saveJobResult,
+} from "../repositories/generation.repository";
 import { enhancePrompt } from "../services/promptEnhancer";
+import { generateImage } from "../services/imageService";
+import { generateText } from "../services/textService";
 
 const router = Router();
 
 const VALID_TYPES = Object.values(GenerationType);
+
+async function processJob(job: GenerationJob): Promise<void> {
+  try {
+    await updateJobStatus(job.id, "GENERATING");
+
+    const prompt = job.enhancedPrompt || job.originalPrompt;
+
+    if (job.type === GenerationType.IMAGE) {
+      const resultUrl = await generateImage(prompt);
+      await saveJobResult(job.id, { resultUrl });
+    } else {
+      const resultText = await generateText(prompt);
+      await saveJobResult(job.id, { resultText });
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    await updateJobStatus(job.id, "FAILED", message);
+  }
+}
 
 router.post("/", async (req: Request, res: Response) => {
   try {
@@ -41,6 +67,11 @@ router.post("/", async (req: Request, res: Response) => {
       type,
       priority,
     });
+
+    // Fire-and-forget: generation runs in the background
+    processJob(job).catch((err) =>
+      console.error(`Background processing failed for job ${job.id}:`, err)
+    );
 
     res.status(201).json({
       jobId: job.id,
